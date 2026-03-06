@@ -1,7 +1,7 @@
 // simulating a database of API keys
 const API_KEYS = {
   free_123: { tier: "FREE", limit: 10 },
-  pro_456: { tier: "PRO", limit: 100 },
+  pro_456: { tier: "PRO", limit: 50 },
   enterprise_789: { tier: "ENTERPRISE", limit: 100 },
 };
 
