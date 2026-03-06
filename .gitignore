@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Docker overrides
+docker-compose.override.yml
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Temporary files
+.tmp/
+temp/
