@@ -1,26 +1,22 @@
 const express = require('express');
-const Redis = require('redis');
+const redisClient = require('./config/redis'); // Import the shared client
+const rateLimiter = require('./middlewares/rateLimiter'); // Import your new logic
 
 const app = express();
 const port = process.env.PORT || 3000;
 const instanceId = process.env.INSTANCE_ID || 'Unknown';
 
-// Connect to Redis (Just to prove we can)
-const redisClient = Redis.createClient({
-    url: `redis://${process.env.REDIS_HOST || 'localhost'}:6379`
-});
-redisClient.connect().catch(console.error);
+// Apply Rate Limiter to ALL routes
+app.use(rateLimiter);
 
 app.get('/', async (req, res) => {
-    // Increment a global counter in Redis
-    const count = await redisClient.incr('global_request_count');
-    
-    console.log(`[${instanceId}] Handling request. Global Count: ${count}`);
+    // Just for debug visibility
+    const count = await redisClient.get('global_request_count'); 
     
     res.json({
-        message: "Hello from the Distributed System!",
+        message: "Request Allowed!",
         handled_by: instanceId,
-        global_count: count
+        global_hits: count
     });
 });
 
