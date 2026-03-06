@@ -1,47 +1,60 @@
 const fs = require('fs');
 const path = require('path');
 const redisClient = require('../config/redis');
+const { API_KEYS, DEFAULT_LIMIT } = require('../config/tiers'); // <--- Import Config
 
-// 1. Load the Lua Script into memory (Read it once when server starts)
 const LUA_SCRIPT = fs.readFileSync(path.join(__dirname, 'rateLimiter.lua'), 'utf8');
-
-const WINDOW_SIZE_IN_SECONDS = 60;
-const MAX_WINDOW_REQUESTS = 10;
-const WINDOW_LOG_INTERVAL_IN_MS = WINDOW_SIZE_IN_SECONDS * 1000;
+const WINDOW_LOG_INTERVAL_IN_MS = 60 * 1000; // 60 Seconds
 
 const rateLimiter = async (req, res, next) => {
     try {
-        const ip = req.headers['x-real-ip'] || req.socket.remoteAddress;
-        const key = `rate_limit:${ip}`;
-        const currentTimestamp = Date.now().toString(); // Lua needs strings
-        const uniqueId = Math.random().toString();
+        const apiKey = req.headers['x-api-key'];
         
-        // 2. Execute the Script Atomically
-        // eval(script, { keys: [], arguments: [] })
+        // --- DYNAMIC CONFIGURATION LOGIC ---
+        let limit;
+        let redisKey;
+
+        if (apiKey && API_KEYS[apiKey]) {
+            // SCENARIO A: Valid API Key
+            limit = API_KEYS[apiKey].limit;
+            redisKey = `rate_limit:api:${apiKey}`; // Track by Key
+        } else {
+            // SCENARIO B: Anonymous / Invalid Key
+            const ip = req.headers['x-real-ip'] || req.socket.remoteAddress;
+            limit = DEFAULT_LIMIT;
+            redisKey = `rate_limit:ip:${ip}`; // Track by IP
+        }
+        // -----------------------------------
+
+        const currentTimestamp = Date.now().toString();
+        const uniqueId = Math.random().toString();
+
+        // Pass the DYNAMIC 'limit' to Lua
         const result = await redisClient.eval(LUA_SCRIPT, {
-            keys: [key],
+            keys: [redisKey],
             arguments: [
-                currentTimestamp,           // ARGV[1]
-                WINDOW_LOG_INTERVAL_IN_MS.toString(), // ARGV[2]
-                MAX_WINDOW_REQUESTS.toString(),       // ARGV[3]
-                uniqueId                    // ARGV[4]
+                currentTimestamp,           
+                WINDOW_LOG_INTERVAL_IN_MS.toString(), 
+                limit.toString(), // <--- This used to be hardcoded 10
+                uniqueId                    
             ]
         });
 
-        // 3. Check Result (1 = Allowed, 0 = Blocked)
         if (result === 0) {
             return res.status(429).json({
                 error: 'Too Many Requests',
-                message: `You have exceeded the ${MAX_WINDOW_REQUESTS} requests per minute limit.`
+                message: `You have exceeded your limit of ${limit} requests per minute. Upgrade your tier for more.`
             });
         }
 
-        // Allowed!
+        // Add headers so the user knows what their limit is
+        res.set('X-RateLimit-Limit', limit);
+        
         next();
 
     } catch (error) {
         console.error("Rate Limiter Error:", error);
-        next(); // Fail open
+        next();
     }
 };
 
